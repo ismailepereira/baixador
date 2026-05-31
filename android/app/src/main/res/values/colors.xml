@@ -1,0 +1,8 @@
+<?xml version="1.0" encoding="utf-8"?>
+<resources>
+    <color name="baixador_green">#1F8A3A</color>
+    <color name="baixador_green_dark">#166B2C</color>
+    <color name="baixador_bg">#1C1C1E</color>
+    <color name="baixador_surface">#2C2C2E</color>
+    <color name="baixador_border">#3A3A3C</color>
+</resources>

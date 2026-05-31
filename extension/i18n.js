@@ -1,0 +1,130 @@
+// Tabela de strings em PT-BR e EN. Detecta idioma do navegador (chrome.i18n)
+// ou cai pra PT por padrao.
+// Wrapping em IIFE pra nao vazar STRINGS/LANG/T no escopo global da extensao
+// (content.js declara seu proprio const T).
+(() => {
+const STRINGS = {
+  "pt-BR": {
+    // Painel
+    panel_title: "⬇ Baixador",
+    minimize: "Minimizar",
+    group_video: "Vídeo (MP4)",
+    group_audio: "Áudio",
+    group_photo: "Foto / Galeria",
+    group_spotify: "Spotify",
+    quality_best: "Melhor disponível",
+    quality_1080: "1080p (Full HD)",
+    quality_720: "720p (HD)",
+    quality_480: "480p",
+    quality_360: "360p",
+    audio_mp3: "♪ MP3 (melhor qualidade)",
+    photo_btn: "📷 Baixar fotos / carrossel",
+    photo_hint: "Funciona com Instagram, Twitter, Pinterest, Reddit, etc.",
+    spotify_btn_default: "🎵 Baixar do Spotify",
+    spotify_track: "🎵 Baixar música",
+    spotify_playlist: "🎵 Baixar playlist completa",
+    spotify_album: "🎵 Baixar álbum",
+    spotify_artist: "🎵 Top tracks do artista",
+    spotify_episode: "🎵 Baixar episódio (podcast)",
+    spotify_show: "🎵 Baixar episódios do podcast",
+    spotify_empty: "🎵 Abra uma música, playlist ou álbum",
+    spotify_empty_hint: "Navegue até uma música/playlist/álbum no Spotify",
+    subtitles_label: "📝 Incluir legendas (PT/EN)",
+    trim_open: "✂ Cortar trecho",
+    trim_close: "✂ Recolher recorte",
+    trim_start: "Início:",
+    trim_end: "Fim:",
+    trim_hint: "Formato: MM:SS ou HH:MM:SS. Vazio = início/fim do vídeo.",
+    history_show: "📜 Mostrar histórico",
+    history_hide: "📜 Ocultar histórico",
+    history_loading: "Carregando...",
+    history_empty: "Sem downloads recentes.",
+    history_offline: "Servidor offline.",
+    empty_jobs: "Nenhum download ativo.",
+    starting: "Iniciando...",
+    downloading: "Baixando",
+    merging: "Mesclando vídeo + áudio",
+    converting: "Convertendo",
+    cancelling: "Cancelando...",
+    done: "✓ Concluído.",
+    cancelled: "✕ Cancelado.",
+    error_generic: "✗ Erro.",
+    server_offline: "Servidor offline. Verifique se o Baixador está rodando.",
+    // Posts
+    post_btn: "⬇ Baixar post",
+    post_loading: "Baixando…",
+    post_done: "✓ Baixado",
+    post_err: "✗ Erro",
+    // Imagens
+    img_tooltip: "Baixar esta imagem",
+    // FAB
+    fab_video: "Baixador — vídeo detectado",
+    fab_no_video: "Baixador — nenhum vídeo nesta página (vai tentar pela URL mesmo assim)",
+  },
+  "en": {
+    panel_title: "⬇ Downloader",
+    minimize: "Minimize",
+    group_video: "Video (MP4)",
+    group_audio: "Audio",
+    group_photo: "Photo / Gallery",
+    group_spotify: "Spotify",
+    quality_best: "Best available",
+    quality_1080: "1080p (Full HD)",
+    quality_720: "720p (HD)",
+    quality_480: "480p",
+    quality_360: "360p",
+    audio_mp3: "♪ MP3 (best quality)",
+    photo_btn: "📷 Download photos / carousel",
+    photo_hint: "Works with Instagram, Twitter, Pinterest, Reddit, etc.",
+    spotify_btn_default: "🎵 Download from Spotify",
+    spotify_track: "🎵 Download song",
+    spotify_playlist: "🎵 Download full playlist",
+    spotify_album: "🎵 Download album",
+    spotify_artist: "🎵 Artist top tracks",
+    spotify_episode: "🎵 Download episode",
+    spotify_show: "🎵 Download podcast episodes",
+    spotify_empty: "🎵 Open a song, playlist or album",
+    spotify_empty_hint: "Navigate to a track/playlist/album on Spotify",
+    subtitles_label: "📝 Include subtitles (PT/EN)",
+    trim_open: "✂ Trim section",
+    trim_close: "✂ Hide trim",
+    trim_start: "Start:",
+    trim_end: "End:",
+    trim_hint: "Format: MM:SS or HH:MM:SS. Empty = start/end of video.",
+    history_show: "📜 Show history",
+    history_hide: "📜 Hide history",
+    history_loading: "Loading...",
+    history_empty: "No recent downloads.",
+    history_offline: "Server offline.",
+    empty_jobs: "No active downloads.",
+    starting: "Starting...",
+    downloading: "Downloading",
+    merging: "Merging video + audio",
+    converting: "Converting",
+    cancelling: "Cancelling...",
+    done: "✓ Done.",
+    cancelled: "✕ Cancelled.",
+    error_generic: "✗ Error.",
+    server_offline: "Server offline. Check that Baixador is running.",
+    post_btn: "⬇ Download post",
+    post_loading: "Downloading…",
+    post_done: "✓ Downloaded",
+    post_err: "✗ Error",
+    img_tooltip: "Download this image",
+    fab_video: "Downloader — video detected",
+    fab_no_video: "Downloader — no video on this page (will try with URL anyway)",
+  },
+};
+
+function detectLang() {
+  const ui = (chrome?.i18n?.getUILanguage?.() || navigator.language || "pt-BR").toLowerCase();
+  if (ui.startsWith("pt")) return "pt-BR";
+  return "en";
+}
+
+const LANG = detectLang();
+const T = STRINGS[LANG] || STRINGS["pt-BR"];
+
+// Expose globalmente pra outros arquivos do content script
+window.__baixador_i18n = { T, LANG };
+})();

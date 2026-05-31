@@ -1,0 +1,81 @@
+# ========= Builds / releases / instaladores =========
+release/
+release-*/
+installer/
+dist/
+build/
+out/
+bin/
+*.exe
+*.msi
+*.zip
+*.tar.gz
+*.7z
+*.dmg
+*.AppImage
+
+# Binários embarcados (ffmpeg, etc.)
+**/ffmpeg/
+**/ffprobe*
+**/ffplay*
+
+# ========= Python =========
+.venv/
+venv/
+env/
+__pycache__/
+*.pyc
+*.pyo
+*.pyd
+*.egg-info/
+.pytest_cache/
+.mypy_cache/
+
+# ========= Node =========
+node_modules/
+npm-debug.log*
+yarn-debug.log*
+yarn-error.log*
+.pnpm-debug.log*
+
+# ========= Android / Gradle / Kotlin =========
+android/.gradle/
+android/build/
+android/app/build/
+android/captures/
+android/local.properties
+android/.idea/
+android/*.iml
+android/app/*.iml
+android/keystore.properties
+android/*.jks
+android/*.keystore
+android/release/
+android/app/release/
+
+# ========= IDE / Editores =========
+.idea/
+.vscode/
+*.swp
+*.swo
+*~
+
+# ========= Sistema =========
+.DS_Store
+Thumbs.db
+desktop.ini
+
+# ========= Logs / temporários =========
+*.log
+*.tmp
+*.bak
+
+# ========= Configs locais sensíveis =========
+.env
+.env.local
+.env.*.local
+config.local.*
+secrets.*
+
+# ========= Claude Code interno =========
+.claude/

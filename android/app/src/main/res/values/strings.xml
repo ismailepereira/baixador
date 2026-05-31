@@ -1,0 +1,25 @@
+<?xml version="1.0" encoding="utf-8"?>
+<resources>
+    <string name="app_name">Baixador</string>
+    <string name="subtitle">Cole o link, escolha o formato, e baixe.</string>
+    <string name="url_placeholder">Cole a URL aqui (YouTube, Instagram, TikTok, Spotify…)</string>
+    <string name="mode_video">Vídeo</string>
+    <string name="mode_audio">Áudio</string>
+    <string name="mode_photo">Foto</string>
+    <string name="quality_label">Qualidade</string>
+    <string name="download_button">⬇ Baixar</string>
+    <string name="downloading">Baixando…</string>
+    <string name="cancel">Cancelar</string>
+    <string name="open_folder">Abrir pasta</string>
+    <string name="paste_first">Cole um link primeiro.</string>
+    <string name="ready">Pronto!</string>
+
+    <string name="notification_channel_id">baixador_downloads</string>
+    <string name="notification_channel_name">Downloads</string>
+    <string name="notification_channel_desc">Status de downloads em andamento</string>
+
+    <string name="spotify_not_configured">Spotify não configurado. Adicione client ID/secret em keystore.properties.</string>
+
+    <string name="history">Histórico</string>
+    <string name="history_empty">Nenhum download ainda.</string>
+</resources>

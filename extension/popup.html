@@ -1,0 +1,132 @@
+<!doctype html>
+<html lang="pt-BR">
+<head>
+  <meta charset="utf-8" />
+  <title>Baixador</title>
+  <style>
+    :root { color-scheme: dark; }
+    body {
+      width: 340px;
+      margin: 0;
+      padding: 14px;
+      font: 13px/1.4 system-ui, sans-serif;
+      background: #1c1c1e;
+      color: #f5f5f7;
+    }
+    h1 { margin: 0 0 10px; font-size: 15px; }
+    .url {
+      font-size: 11px;
+      word-break: break-all;
+      opacity: 0.7;
+      margin-bottom: 12px;
+      max-height: 50px;
+      overflow: auto;
+    }
+    fieldset {
+      border: 1px solid #3a3a3c;
+      border-radius: 6px;
+      padding: 8px 10px;
+      margin: 0 0 10px;
+    }
+    legend { padding: 0 4px; font-size: 11px; opacity: 0.7; }
+    .row { display: flex; gap: 6px; margin-bottom: 8px; }
+    select {
+      flex: 1;
+      padding: 6px;
+      background: #2c2c2e;
+      color: #f5f5f7;
+      border: 1px solid #3a3a3c;
+      border-radius: 4px;
+      font-size: 12px;
+    }
+    button {
+      flex: 1;
+      padding: 8px;
+      background: #1f8a3a;
+      color: #fff;
+      border: none;
+      border-radius: 6px;
+      cursor: pointer;
+      font-weight: 600;
+      font-size: 12px;
+    }
+    button:hover { background: #166b2c; }
+    button.secondary { background: #3a3a3c; }
+    button.secondary:hover { background: #4a4a4c; }
+    button.audio { background: #b8860b; }
+    button.audio:hover { background: #9c7209; }
+    button.photo { background: #7c3aed; }
+    button.photo:hover { background: #6d28d9; }
+    button.cancel { background: #7f1d1d; margin-top: 4px; width: 100%; }
+    button.cancel:hover { background: #991b1b; }
+    .status {
+      margin-top: 10px;
+      padding: 8px;
+      background: #000;
+      border-radius: 6px;
+      font-family: ui-monospace, Consolas, monospace;
+      font-size: 11px;
+      max-height: 180px;
+      overflow-y: auto;
+      white-space: pre-wrap;
+    }
+    .ok { color: #4ade80; }
+    .err { color: #f87171; }
+    label { font-size: 11px; opacity: 0.8; align-self: center; min-width: 60px; }
+  </style>
+</head>
+<body>
+  <h1>⬇ Baixador</h1>
+  <div class="url" id="url">carregando...</div>
+
+  <fieldset>
+    <legend>Vídeo</legend>
+    <div class="row">
+      <label>Qualidade:</label>
+      <select id="quality">
+        <option value="best">Melhor disponível</option>
+        <option value="1080p">1080p (Full HD)</option>
+        <option value="720p" selected>720p (HD)</option>
+        <option value="480p">480p</option>
+        <option value="360p">360p</option>
+      </select>
+    </div>
+    <div class="row">
+      <button id="video">Baixar vídeo (MP4)</button>
+    </div>
+  </fieldset>
+
+  <fieldset>
+    <legend>Áudio</legend>
+    <div class="row">
+      <label>Qualidade:</label>
+      <select id="audioQuality">
+        <option value="best" selected>Melhor (~245 kbps)</option>
+        <option value="high">Alta (~190 kbps)</option>
+        <option value="med">Média (~130 kbps)</option>
+      </select>
+    </div>
+    <div class="row">
+      <button id="audio" class="audio">Baixar áudio (MP3)</button>
+    </div>
+  </fieldset>
+
+  <fieldset>
+    <legend>Foto / Galeria</legend>
+    <div class="row">
+      <button id="photo" class="photo">📷 Fotos / Carrossel (IG, Twitter…)</button>
+    </div>
+  </fieldset>
+
+  <div class="row">
+    <button id="folder" class="secondary">Abrir pasta</button>
+    <button id="check" class="secondary">Servidor?</button>
+  </div>
+
+  <button id="cancelBtn" class="cancel" style="display:none">✕ Cancelar download</button>
+
+  <div class="status" id="log">Pronto.</div>
+
+  <script src="popup.js"></script>
+</body>
+</html>
