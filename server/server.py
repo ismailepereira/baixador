@@ -57,7 +57,7 @@ def _tool_cmd(name: str) -> list[str]:
     return [_find_tool(name)]
 
 
-__version__ = "1.1.2"
+__version__ = "1.1.3"
 # Feed publico com {"version": "...", "url": "...", "notes": "..."}.
 # E o update.json versionado na raiz do repo, servido pelo raw do GitHub.
 # Publicar uma versao nova = editar o update.json, dar push, e anexar o instalador
@@ -205,6 +205,13 @@ JOB_LOCK = threading.Lock()
 
 def _spawn(cmd: list[str], job_id: str, cleanup_files: list[str] | None, dest_dir: str | None = None) -> None:
     """Roda um comando externo e empurra cada linha de output na fila do job."""
+    # Recria as pastas a cada download: se o usuario apagar Downloads/Baixador
+    # com o servidor rodando, o Popen abaixo falha com WinError 267 (cwd
+    # invalido) e TODO download subsequente morre ate reiniciar o app.
+    DOWNLOADS_DIR.mkdir(parents=True, exist_ok=True)
+    if dest_dir:
+        Path(dest_dir).mkdir(parents=True, exist_ok=True)
+
     with JOB_LOCK:
         job = JOBS[job_id]
         job["status"] = "running"
@@ -250,7 +257,12 @@ def _spawn(cmd: list[str], job_id: str, cleanup_files: list[str] | None, dest_di
         cur["returncode"] = proc.returncode
         cur["ended_at"] = time.time()
         final_status = cur["status"]
+        started_at = cur.get("started_at") or 0
         cur["queue"].put(None)
+    if final_status == "done":
+        files = _files_created_since(dest_dir or str(DOWNLOADS_DIR), started_at)
+        with JOB_LOCK:
+            JOBS[job_id]["files"] = files
     _cleanup(cleanup_files)
     # Limpa arquivos parciais se o job foi cancelado ou deu erro
     if final_status in ("cancelled", "error") and dest_dir:
@@ -271,6 +283,33 @@ def _cleanup(files: list[str] | None) -> None:
 
 
 PARTIAL_EXTS = (".part", ".ytdl", ".tmp", ".temp", ".part-Frag", ".aria2", ".download")
+
+
+def _files_created_since(dest_dir: str, since: float, limit: int = 5) -> list[dict]:
+    """Arquivos finais (nao-parciais) modificados em dest_dir desde `since`.
+
+    Usado pra saber o que um job realmente produziu -- yt-dlp/spotdl/gallery-dl
+    nao reportam o caminho final de forma uniforme, entao olhamos o filesystem.
+    """
+    if not dest_dir or not os.path.isdir(dest_dir):
+        return []
+    found = []
+    for root, _, names in os.walk(dest_dir):
+        for name in names:
+            if name.endswith(PARTIAL_EXTS) or ".part-" in name:
+                continue
+            path = os.path.join(root, name)
+            try:
+                st = os.stat(path)
+            except OSError:
+                continue
+            # 5s de folga: o mtime pode ser levemente anterior ao started_at
+            # (ffmpeg preserva timestamps em alguns remuxes)
+            if st.st_mtime >= since - 5:
+                found.append({"name": name, "path": path, "size": st.st_size,
+                              "mtime": st.st_mtime})
+    found.sort(key=lambda f: f["mtime"], reverse=True)
+    return found[:limit]
 
 
 def _cleanup_partials(dest_dir: str | None) -> int:
@@ -971,12 +1010,53 @@ def stream(job_id: str) -> Response:
 
 @app.route("/open-folder", methods=["POST"])
 def open_folder() -> Response:
+    DOWNLOADS_DIR.mkdir(parents=True, exist_ok=True)
     if sys.platform == "win32":
         os.startfile(str(DOWNLOADS_DIR))  # noqa: S606
     elif sys.platform == "darwin":
         subprocess.Popen(["open", str(DOWNLOADS_DIR)])
     else:
         subprocess.Popen(["xdg-open", str(DOWNLOADS_DIR)])
+    return jsonify({"ok": True})
+
+
+@app.route("/recent-files")
+def recent_files() -> Response:
+    """Ultimos arquivos baixados (varre a pasta; funciona mesmo apos reiniciar)."""
+    limit = min(int(request.args.get("limit", 2)), 20)
+    files = _files_created_since(str(DOWNLOADS_DIR), 0, limit=limit)
+    # exclui a area temporaria do mobile
+    files = [f for f in files if ".mobile-temp" not in f["path"]]
+    return jsonify({"files": [
+        {"name": f["name"], "path": f["path"], "size": f["size"], "mtime": f["mtime"]}
+        for f in files[:limit]
+    ]})
+
+
+@app.route("/reveal", methods=["POST"])
+def reveal() -> Response:
+    """Abre o Explorer com o arquivo selecionado. So aceita caminhos dentro
+    de DOWNLOADS_DIR (o caminho vem do cliente, entao validamos)."""
+    data = request.get_json(silent=True) or {}
+    raw = (data.get("path") or "").strip()
+    if not raw:
+        return jsonify({"ok": False, "error": "path ausente"}), 400
+    try:
+        target = Path(raw).resolve()
+        base = DOWNLOADS_DIR.resolve()
+        if base not in target.parents and target != base:
+            return jsonify({"ok": False, "error": "fora da pasta de downloads"}), 403
+    except OSError:
+        return jsonify({"ok": False, "error": "caminho invalido"}), 400
+    if not target.exists():
+        return jsonify({"ok": False, "error": "arquivo nao existe mais"}), 404
+    if sys.platform == "win32":
+        # /select, destaca o arquivo dentro do Explorer
+        subprocess.Popen(["explorer", "/select,", str(target)])
+    elif sys.platform == "darwin":
+        subprocess.Popen(["open", "-R", str(target)])
+    else:
+        subprocess.Popen(["xdg-open", str(target.parent)])
     return jsonify({"ok": True})
 
 

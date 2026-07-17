@@ -227,6 +227,26 @@ chrome.runtime.onMessage.addListener((msg, sender, sendResponse) => {
     return true;
   }
 
+  if (msg.type === "recent-files") {
+    fetch(`${SERVER}/recent-files?limit=2`)
+      .then(r => r.json())
+      .then(d => sendResponse({ ok: true, files: d.files || [] }))
+      .catch(e => sendResponse({ ok: false, error: String(e) }));
+    return true;
+  }
+
+  if (msg.type === "reveal") {
+    fetch(`${SERVER}/reveal`, {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({ path: msg.path }),
+    })
+      .then(r => r.json())
+      .then(d => sendResponse(d))
+      .catch(e => sendResponse({ ok: false, error: String(e) }));
+    return true;
+  }
+
   if (msg.type === "list-jobs") {
     fetch(`${SERVER}/jobs?limit=30`)
       .then(r => r.json())

@@ -11,7 +11,14 @@ import traceback
 
 def _setup_logging():
     """Em modo --windowed, sys.stdout/stderr sao None. Redirecionar pra arquivo
-    e essencial, senao qualquer print() crasha o processo."""
+    e essencial, senao qualquer print() crasha o processo.
+
+    MAS: quando este exe roda como filho `--tool yt-dlp` (spawnado pelo servidor
+    com stdout=PIPE), o stdout e um pipe valido -- e redirecionar aqui manda todo
+    o progresso do yt-dlp pro baixador.log em vez do painel da extensao. So
+    redireciona quando stdout realmente nao existe."""
+    if sys.stdout is not None:
+        return
     if getattr(sys, "frozen", False):
         log_dir = os.path.join(
             os.environ.get("LOCALAPPDATA", os.path.expanduser("~")),

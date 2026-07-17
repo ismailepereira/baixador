@@ -337,6 +337,35 @@
   font-family: ui-monospace, Consolas, monospace;
 }
 
+/* Últimos baixados */
+#bx-recent { border-top: 1px solid #3a3a3c; padding-bottom: 4px; }
+#bx-recent:empty { display: none; }
+.bx-recent-item {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  padding: 3px 12px;
+  font-size: 11px;
+}
+.bx-recent-item:hover { background: #2c2c2e; }
+.bx-recent-item .name {
+  flex: 1;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+  color: #ccc;
+}
+.bx-recent-item .reveal {
+  background: none;
+  border: none;
+  cursor: pointer;
+  font-size: 14px;
+  padding: 0 2px;
+  line-height: 1;
+  transition: transform 0.1s ease;
+}
+.bx-recent-item .reveal:hover { transform: scale(1.2); }
+
 /* Toggle Histórico */
 #bx-history-toggle {
   display: block;

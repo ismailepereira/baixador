@@ -178,6 +178,54 @@ def test_cleanup_partials_handles_missing_dir():
     assert server._cleanup_partials("/caminho/que/nao/existe") == 0
 
 
+# === Arquivos recentes / reveal ===
+
+def test_files_created_since_filtra_parciais_e_ordena(tmp_path):
+    import os, time
+    old = tmp_path / "antigo.mp4"
+    old.write_text("x")
+    os.utime(old, (100, 100))  # bem antes do corte
+    new1 = tmp_path / "novo1.mp4"; new1.write_text("x")
+    new2 = tmp_path / "sub"; new2.mkdir()
+    newer = new2 / "novo2.mp3"; newer.write_text("x")
+    part = tmp_path / "incompleto.mp4.part"; part.write_text("x")
+    now = time.time()
+    os.utime(new1, (now - 10, now - 10))
+    os.utime(newer, (now, now))
+
+    files = server._files_created_since(str(tmp_path), now - 60)
+    names = [f["name"] for f in files]
+    assert names == ["novo2.mp3", "novo1.mp4"]   # mais recente primeiro
+    assert "incompleto.mp4.part" not in names
+    assert "antigo.mp4" not in names
+
+
+def test_files_created_since_dir_inexistente():
+    assert server._files_created_since("/nao/existe", 0) == []
+
+
+def test_reveal_exige_path(client):
+    assert client.post("/reveal", json={}).status_code == 400
+
+
+def test_reveal_recusa_path_fora_da_pasta(client):
+    r = client.post("/reveal", json={"path": "C:\\Windows\\System32\\cmd.exe"})
+    assert r.status_code == 403
+
+
+def test_reveal_404_para_arquivo_inexistente(client):
+    r = client.post("/reveal", json={"path": str(server.DOWNLOADS_DIR / "nao-existe.mp4")})
+    assert r.status_code == 404
+
+
+def test_recent_files_endpoint(client):
+    r = client.get("/recent-files?limit=2")
+    assert r.status_code == 200
+    data = r.get_json()
+    assert "files" in data
+    assert len(data["files"]) <= 2
+
+
 # === Download endpoint validation ===
 
 def test_download_requires_url(client):

@@ -196,6 +196,11 @@ function build() {
   statusEl.innerHTML = `<div class="empty">Nenhum download ativo.</div>`;
   panel.appendChild(statusEl);
 
+  // Ultimos arquivos baixados (vem do servidor; sobrevive a reinicios)
+  const recentBox = document.createElement("div");
+  recentBox.id = "bx-recent";
+  panel.appendChild(recentBox);
+
   // Toggle Historico
   const histToggle = document.createElement("button");
   histToggle.id = "bx-history-toggle";
@@ -215,6 +220,8 @@ function build() {
 
   makeDraggable(header, root);
   loadPosition();
+  // So depois do painel estar no documento (refreshRecent usa getElementById)
+  refreshRecent();
 }
 
 function toggle(toCollapsed) {
@@ -296,6 +303,7 @@ function finalizeJob(jobId, status, errorTail) {
   if (!j) return;
   j.card.dataset.state = status;
   j.cancelBtn.classList.add("hidden");
+  if (status === "done") refreshRecent();
   if (status === "done") j.msg.textContent = "✓ Concluído.";
   else if (status === "cancelled") j.msg.textContent = "✕ Cancelado.";
   else j.msg.textContent = errorTail ? `✗ ${errorTail.slice(0, 120)}` : "✗ Erro.";
@@ -312,6 +320,43 @@ function cancelJob(jobId) {
   const j = jobs.get(jobId);
   if (j) { j.msg.textContent = "Cancelando..."; j.cancelBtn.disabled = true; }
   chrome.runtime.sendMessage({ type: "cancel", jobId }, () => {});
+}
+
+// === Ultimos baixados ===
+async function refreshRecent() {
+  const box = document.getElementById("bx-recent");
+  if (!box) return;
+  try {
+    const resp = await new Promise((r) =>
+      chrome.runtime.sendMessage({ type: "recent-files" }, r)
+    );
+    const files = resp?.files || [];
+    if (!files.length) { box.innerHTML = ""; return; }
+    box.innerHTML = "";
+    const title = document.createElement("div");
+    title.className = "group";
+    title.textContent = T.recent_title || "Últimos baixados";
+    box.appendChild(title);
+    for (const f of files) {
+      const row = document.createElement("div");
+      row.className = "bx-recent-item";
+      const name = document.createElement("span");
+      name.className = "name";
+      name.textContent = f.name;
+      name.title = f.path;
+      const btn = document.createElement("button");
+      btn.className = "reveal";
+      btn.type = "button";
+      btn.textContent = "📂";
+      btn.title = T.reveal_tooltip || "Abrir a pasta com o arquivo selecionado";
+      btn.addEventListener("click", () =>
+        chrome.runtime.sendMessage({ type: "reveal", path: f.path }, () => {})
+      );
+      row.appendChild(name);
+      row.appendChild(btn);
+      box.appendChild(row);
+    }
+  } catch { /* servidor offline -- secao some */ }
 }
 
 // === Historico ===

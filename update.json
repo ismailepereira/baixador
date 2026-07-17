@@ -1,5 +1,5 @@
 {
-  "version": "1.1.2",
-  "url": "https://github.com/ismailepereira/baixador/releases/download/v1.1.2/Baixador-Setup-v1.1.2.exe",
-  "notes": "Escolha o formato antes de baixar: perfis para editar no Premiere (H.264/AAC), no CapCut e em ProRes. Agora disponível no painel flutuante sobre o vídeo, não só no ícone da extensão."
+  "version": "1.1.3",
+  "url": "https://github.com/ismailepereira/baixador/releases/download/v1.1.3/Baixador-Setup-v1.1.3.exe",
+  "notes": "Últimos baixados no painel com botão de abrir a pasta; corrige progresso que não aparecia no app instalado e downloads que quebravam se a pasta fosse apagada."
 }
