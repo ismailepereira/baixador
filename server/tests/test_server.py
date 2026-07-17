@@ -32,6 +32,67 @@ def test_health(client):
     assert data["ok"] is True
     assert data["version"] == server.__version__
     assert "qualities" in data and "1080p" in data["qualities"]
+    assert "premiere" in data["profiles"]
+
+
+# === Perfis de saida de video ===
+
+@pytest.mark.parametrize("quality,expected", [
+    ("best", None),
+    ("1080p", 1080),
+    ("720p", 720),
+    ("360p", 360),
+    ("", None),
+])
+def test_height_limit(quality, expected):
+    assert server._height_limit(quality) == expected
+
+
+def test_editor_format_prioriza_h264_e_aac():
+    fmt = server._editor_format(720)
+    # A primeira alternativa da cadeia e a que o yt-dlp tenta antes de tudo.
+    first = fmt.split("/")[0]
+    assert "vcodec^=avc1" in first
+    assert "acodec^=mp4a" in first
+    assert "height<=720" in first
+
+
+def test_editor_format_sem_limite_de_altura():
+    assert "height" not in server._editor_format(None)
+
+
+def _flag(args: list[str], flag: str) -> str | None:
+    return args[args.index(flag) + 1] if flag in args else None
+
+
+def test_profile_padrao_mantem_comportamento_antigo():
+    args = server._profile_args("padrao", "720p")
+    assert _flag(args, "-f") == server.QUALITY_FORMATS["720p"]
+    assert _flag(args, "--merge-output-format") == "mp4"
+
+
+def test_profile_premiere_forca_h264_e_normaliza_audio():
+    args = server._profile_args("premiere", "best")
+    assert "vcodec^=avc1" in _flag(args, "-f")
+    assert _flag(args, "--merge-output-format") == "mp4"
+    assert "-c:a aac" in _flag(args, "--postprocessor-args")
+
+
+def test_profile_capcut_limita_em_1080p():
+    # Mesmo pedindo "best", o CapCut nao deve receber 4K.
+    assert "height<=1080" in _flag(server._profile_args("capcut", "best"), "-f")
+    # E uma escolha menor que o teto continua valendo.
+    assert "height<=720" in _flag(server._profile_args("capcut", "720p"), "-f")
+
+
+def test_profile_prores_recoda_pra_mov():
+    args = server._profile_args("prores", "best")
+    assert _flag(args, "--recode-video") == "mov"
+    assert "prores_ks" in _flag(args, "--postprocessor-args")
+
+
+def test_profile_desconhecido_cai_no_padrao():
+    assert server._profile_args("inventado", "720p") == server._profile_args("padrao", "720p")
 
 
 # === Spotify URL detection ===
@@ -115,6 +176,54 @@ def test_cleanup_partials_removes_part_files(tmp_path):
 def test_cleanup_partials_handles_missing_dir():
     assert server._cleanup_partials(None) == 0
     assert server._cleanup_partials("/caminho/que/nao/existe") == 0
+
+
+# === Arquivos recentes / reveal ===
+
+def test_files_created_since_filtra_parciais_e_ordena(tmp_path):
+    import os, time
+    old = tmp_path / "antigo.mp4"
+    old.write_text("x")
+    os.utime(old, (100, 100))  # bem antes do corte
+    new1 = tmp_path / "novo1.mp4"; new1.write_text("x")
+    new2 = tmp_path / "sub"; new2.mkdir()
+    newer = new2 / "novo2.mp3"; newer.write_text("x")
+    part = tmp_path / "incompleto.mp4.part"; part.write_text("x")
+    now = time.time()
+    os.utime(new1, (now - 10, now - 10))
+    os.utime(newer, (now, now))
+
+    files = server._files_created_since(str(tmp_path), now - 60)
+    names = [f["name"] for f in files]
+    assert names == ["novo2.mp3", "novo1.mp4"]   # mais recente primeiro
+    assert "incompleto.mp4.part" not in names
+    assert "antigo.mp4" not in names
+
+
+def test_files_created_since_dir_inexistente():
+    assert server._files_created_since("/nao/existe", 0) == []
+
+
+def test_reveal_exige_path(client):
+    assert client.post("/reveal", json={}).status_code == 400
+
+
+def test_reveal_recusa_path_fora_da_pasta(client):
+    r = client.post("/reveal", json={"path": "C:\\Windows\\System32\\cmd.exe"})
+    assert r.status_code == 403
+
+
+def test_reveal_404_para_arquivo_inexistente(client):
+    r = client.post("/reveal", json={"path": str(server.DOWNLOADS_DIR / "nao-existe.mp4")})
+    assert r.status_code == 404
+
+
+def test_recent_files_endpoint(client):
+    r = client.get("/recent-files?limit=2")
+    assert r.status_code == 200
+    data = r.get_json()
+    assert "files" in data
+    assert len(data["files"]) <= 2
 
 
 # === Download endpoint validation ===

@@ -4,7 +4,20 @@ const urlEl = document.getElementById("url");
 const log = document.getElementById("log");
 const qualityEl = document.getElementById("quality");
 const audioQualityEl = document.getElementById("audioQuality");
+const profileEl = document.getElementById("profile");
+const profileHint = document.getElementById("profileHint");
 let currentUrl = "";
+
+const PROFILE_HINTS = {
+  padrao:   "Melhor qualidade por MB, mas pode vir VP9/Opus — o Premiere recusa.",
+  premiere: "H.264 + AAC em .mp4. Abre direto no Premiere, sem re-encode.",
+  capcut:   "H.264 + AAC em .mp4, limitado a 1080p pro CapCut rodar leve.",
+  prores:   "ProRes 422 HQ + PCM em .mov. Edição fluida, arquivo bem maior e demora.",
+};
+
+function updateHint() {
+  profileHint.textContent = PROFILE_HINTS[profileEl.value] || "";
+}
 
 function append(line, cls) {
   const span = document.createElement("div");
@@ -23,9 +36,11 @@ async function init() {
   currentUrl = await getTabUrl();
   urlEl.textContent = currentUrl || "(sem aba ativa)";
   // restaura ultima escolha
-  const saved = await chrome.storage.local.get(["quality", "audioQuality"]);
+  const saved = await chrome.storage.local.get(["quality", "audioQuality", "profile"]);
   if (saved.quality) qualityEl.value = saved.quality;
   if (saved.audioQuality) audioQualityEl.value = saved.audioQuality;
+  if (saved.profile) profileEl.value = saved.profile;
+  updateHint();
 }
 
 qualityEl.addEventListener("change", () =>
@@ -34,6 +49,10 @@ qualityEl.addEventListener("change", () =>
 audioQualityEl.addEventListener("change", () =>
   chrome.storage.local.set({ audioQuality: audioQualityEl.value })
 );
+profileEl.addEventListener("change", () => {
+  chrome.storage.local.set({ profile: profileEl.value });
+  updateHint();
+});
 
 let currentJob = null;
 const cancelBtn = document.getElementById("cancelBtn");
@@ -46,8 +65,11 @@ async function download(mode) {
     mode,
     quality: qualityEl.value,
     audio_quality: audioQualityEl.value,
+    profile: profileEl.value,
   };
-  append(`Iniciando ${mode} (${mode === "video" ? payload.quality : payload.audio_quality})...`);
+  append(mode === "video"
+    ? `Iniciando video (${payload.quality}, perfil ${payload.profile})...`
+    : `Iniciando ${mode} (${payload.audio_quality})...`);
   try {
     const res = await fetch(`${SERVER}/download`, {
       method: "POST",

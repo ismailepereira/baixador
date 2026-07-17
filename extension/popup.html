@@ -73,6 +73,12 @@
     .ok { color: #4ade80; }
     .err { color: #f87171; }
     label { font-size: 11px; opacity: 0.8; align-self: center; min-width: 60px; }
+    .hint {
+      font-size: 10px;
+      line-height: 1.35;
+      opacity: 0.65;
+      margin: -4px 0 8px;
+    }
   </style>
 </head>
 <body>
@@ -81,6 +87,16 @@
 
   <fieldset>
     <legend>Vídeo</legend>
+    <div class="row">
+      <label>Formato:</label>
+      <select id="profile">
+        <option value="padrao" selected>Padrão (só assistir)</option>
+        <option value="premiere">Melhor p/ editar no Premiere</option>
+        <option value="capcut">Melhor p/ editar no CapCut</option>
+        <option value="prores">Premiere ProRes (pesado)</option>
+      </select>
+    </div>
+    <div class="hint" id="profileHint"></div>
     <div class="row">
       <label>Qualidade:</label>
       <select id="quality">
@@ -92,7 +108,7 @@
       </select>
     </div>
     <div class="row">
-      <button id="video">Baixar vídeo (MP4)</button>
+      <button id="video">Baixar vídeo</button>
     </div>
   </fieldset>
 

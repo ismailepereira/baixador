@@ -12,6 +12,13 @@ const QUALITIES = [
   { label: T.quality_360  || "360p",              value: "360p" },
 ];
 
+const PROFILES = [
+  { value: "padrao",   label: T.profile_padrao   || "Padrão (só assistir)",              hint: T.profile_hint_padrao   || "" },
+  { value: "premiere", label: T.profile_premiere || "Melhor p/ editar no Premiere",       hint: T.profile_hint_premiere || "" },
+  { value: "capcut",   label: T.profile_capcut   || "Melhor p/ editar no CapCut",         hint: T.profile_hint_capcut   || "" },
+  { value: "prores",   label: T.profile_prores   || "Premiere ProRes (pesado)",           hint: T.profile_hint_prores   || "" },
+];
+
 let root, fab, panel, statusEl;
 let collapsed = true;
 
@@ -54,6 +61,39 @@ function build() {
   gv.className = "group";
   gv.textContent = T.group_video || "Vídeo (MP4)";
   panel.appendChild(gv);
+
+  // Seletor de formato (perfil de codec) -- afeta os botoes de qualidade abaixo.
+  const profileRow = document.createElement("div");
+  profileRow.id = "bx-profile-row";
+  const profileSelect = document.createElement("select");
+  profileSelect.id = "bx-profile";
+  profileSelect.title = T.profile_label || "Formato:";
+  for (const p of PROFILES) {
+    const opt = document.createElement("option");
+    opt.value = p.value;
+    opt.textContent = p.label;
+    profileSelect.appendChild(opt);
+  }
+  profileRow.appendChild(profileSelect);
+  panel.appendChild(profileRow);
+
+  const profileHint = document.createElement("div");
+  profileHint.id = "bx-profile-hint";
+  panel.appendChild(profileHint);
+
+  function updateProfileHint() {
+    const p = PROFILES.find(x => x.value === profileSelect.value);
+    profileHint.textContent = p?.hint || "";
+  }
+  chrome.storage.local.get(["profile"]).then(({ profile }) => {
+    if (profile) profileSelect.value = profile;
+    updateProfileHint();
+  });
+  profileSelect.addEventListener("change", () => {
+    chrome.storage.local.set({ profile: profileSelect.value });
+    updateProfileHint();
+  });
+  profileSelect.addEventListener("click", (e) => e.stopPropagation());
 
   for (const q of QUALITIES) {
     const b = document.createElement("button");
@@ -156,6 +196,11 @@ function build() {
   statusEl.innerHTML = `<div class="empty">Nenhum download ativo.</div>`;
   panel.appendChild(statusEl);
 
+  // Ultimos arquivos baixados (vem do servidor; sobrevive a reinicios)
+  const recentBox = document.createElement("div");
+  recentBox.id = "bx-recent";
+  panel.appendChild(recentBox);
+
   // Toggle Historico
   const histToggle = document.createElement("button");
   histToggle.id = "bx-history-toggle";
@@ -175,6 +220,8 @@ function build() {
 
   makeDraggable(header, root);
   loadPosition();
+  // So depois do painel estar no documento (refreshRecent usa getElementById)
+  refreshRecent();
 }
 
 function toggle(toCollapsed) {
@@ -256,6 +303,7 @@ function finalizeJob(jobId, status, errorTail) {
   if (!j) return;
   j.card.dataset.state = status;
   j.cancelBtn.classList.add("hidden");
+  if (status === "done") refreshRecent();
   if (status === "done") j.msg.textContent = "✓ Concluído.";
   else if (status === "cancelled") j.msg.textContent = "✕ Cancelado.";
   else j.msg.textContent = errorTail ? `✗ ${errorTail.slice(0, 120)}` : "✗ Erro.";
@@ -272,6 +320,43 @@ function cancelJob(jobId) {
   const j = jobs.get(jobId);
   if (j) { j.msg.textContent = "Cancelando..."; j.cancelBtn.disabled = true; }
   chrome.runtime.sendMessage({ type: "cancel", jobId }, () => {});
+}
+
+// === Ultimos baixados ===
+async function refreshRecent() {
+  const box = document.getElementById("bx-recent");
+  if (!box) return;
+  try {
+    const resp = await new Promise((r) =>
+      chrome.runtime.sendMessage({ type: "recent-files" }, r)
+    );
+    const files = resp?.files || [];
+    if (!files.length) { box.innerHTML = ""; return; }
+    box.innerHTML = "";
+    const title = document.createElement("div");
+    title.className = "group";
+    title.textContent = T.recent_title || "Últimos baixados";
+    box.appendChild(title);
+    for (const f of files) {
+      const row = document.createElement("div");
+      row.className = "bx-recent-item";
+      const name = document.createElement("span");
+      name.className = "name";
+      name.textContent = f.name;
+      name.title = f.path;
+      const btn = document.createElement("button");
+      btn.className = "reveal";
+      btn.type = "button";
+      btn.textContent = "📂";
+      btn.title = T.reveal_tooltip || "Abrir a pasta com o arquivo selecionado";
+      btn.addEventListener("click", () =>
+        chrome.runtime.sendMessage({ type: "reveal", path: f.path }, () => {})
+      );
+      row.appendChild(name);
+      row.appendChild(btn);
+      box.appendChild(row);
+    }
+  } catch { /* servidor offline -- secao some */ }
 }
 
 // === Historico ===
@@ -378,9 +463,13 @@ async function download(mode, quality, url = location.href, onResp = null) {
   const { subtitles = false } = await chrome.storage.local.get(["subtitles"]);
   const trimStart = document.getElementById("bx-trim-start")?.value?.trim() || "";
   const trimEnd   = document.getElementById("bx-trim-end")?.value?.trim()   || "";
+  // Perfil so faz sentido em video; audio/foto vao sempre com "padrao" (o servidor ignora).
+  const profile = mode === "video"
+    ? (document.getElementById("bx-profile")?.value || "padrao")
+    : "padrao";
   chrome.runtime.sendMessage(
     { type: "download", url, mode, quality, audio_quality: "best", subtitles,
-      trim_start: trimStart, trim_end: trimEnd },
+      trim_start: trimStart, trim_end: trimEnd, profile },
     (resp) => {
       if (resp?.ok) {
         createJobCard(resp.job_id, mode, quality, url);

@@ -37,8 +37,13 @@ servidor para.
 1. Abra `chrome://extensions`
 2. Ligue o **Modo do desenvolvedor** (canto superior direito)
 3. Clique em **Carregar sem compactação**
-4. Selecione a pasta `F:\Claude\baixador\extension`
+4. Selecione a pasta `extension` deste projeto. Se instalou pelo
+   `Baixador-Setup-*.exe`, ela fica em `%LOCALAPPDATA%\Baixador\extension`.
 5. (Opcional) Fixe a extensão clicando no ícone de peça do Chrome
+
+> Ao atualizar o Baixador, o instalador troca os arquivos da extensão, mas o
+> Chrome não recarrega sozinho: volte em `chrome://extensions` e clique em
+> **Atualizar** no card do Baixador, senão o popup continua o da versão antiga.
 
 ### 3. Ícones
 
@@ -77,6 +82,63 @@ extensão funciona, mas mostra o ícone padrão do Chrome.
   [gyan.dev/ffmpeg](https://www.gyan.dev/ffmpeg/builds/) (zip "release essentials"),
   extraia, e coloque a pasta `bin/` no PATH do Windows.
 - **Spotify dá erro** → `spotdl` precisa de `ffmpeg` também. Mesmo passo.
+- **O Premiere não abre o vídeo** → o perfil "Padrão" pega o melhor formato do
+  YouTube, que costuma ser AV1 ou VP9 com áudio Opus — codecs que o Premiere não
+  decodifica, mesmo dentro de um `.mp4`. No popup da extensão, escolha
+  **"Melhor p/ editar no Premiere"** (H.264 + AAC). Se mesmo assim falhar, use
+  **"Premiere ProRes"**, que re-encoda e sempre funciona (arquivo bem maior).
+
+---
+
+## Build do instalador (Windows)
+
+Pré-requisitos: venv do `server/` criado, `bin/ffmpeg/bin/ffmpeg.exe` presente
+(o `start.bat` baixa), e [Inno Setup 6](https://jrsoftware.org/isdl.php).
+
+```bash
+# 1. Empacota o servidor + ffmpeg num executavel (dist/Baixador/)
+server/.venv/Scripts/python.exe -m PyInstaller Baixador.spec --noconfirm
+
+# 2. Gera o Baixador-Setup-v<versao>.exe na raiz
+"%LOCALAPPDATA%\Programs\Inno Setup 6\ISCC.exe" Baixador.iss
+```
+
+A versão fica em três lugares e precisa bater: `__version__` em
+`server/server.py`, `AppVersion` em `Baixador.iss`, e `version` em
+`extension/manifest.json` (esse último ficou 3 releases atrasado antes de
+alguém notar — é o que aparece em `chrome://extensions`, então é a forma mais
+fácil do usuário confirmar que pegou a versão certa).
+
+O instalador leva junto a pasta `extension/` — veja a nota em [Instalação](#2-extensão-chrome)
+sobre recarregar a extensão no Chrome depois de atualizar.
+
+> **Não mude o `AppId` do `Baixador.iss`.** Ele é o que faz o instalador atualizar
+> por cima em vez de instalar uma segunda cópia. Não é um GUID válido e tem uma
+> chave `}` sobrando — foi escrito à mão na v1.0.0 e está reproduzido exatamente
+> como ficou no registro. "Consertá-lo" quebraria a atualização de quem já tem o
+> Baixador instalado.
+
+## Publicar uma atualização
+
+O Baixador checa atualizações sozinho: o `background.js` da extensão consulta
+`/check-update` na inicialização e a cada 6h, e o servidor compara `__version__`
+com o `update.json` publicado. Se houver versão nova, o usuário recebe uma
+notificação que, clicada, abre o link de download. Ele **não** instala sozinho —
+quem baixa e roda o instalador é o usuário.
+
+Para lançar a versão `X.Y.Z`:
+
+1. Suba a versão em `server/server.py` (`__version__`) e em `Baixador.iss` (`AppVersion`).
+2. Builde o instalador (seção acima).
+3. Crie a Release `vX.Y.Z` no GitHub e anexe o `Baixador-Setup-vX.Y.Z.exe`
+   (o `.exe` é grande demais pro repo — por isso fica na Release, e é por isso
+   que `*.exe` está no `.gitignore`).
+4. Atualize o `update.json` da raiz (`version`, `url`, `notes`) e dê push.
+
+O `update.json` é servido pelo raw do GitHub, e é ele que o
+`UPDATE_FEED_URL` em `server/server.py` aponta. A ordem importa: publique a
+Release **antes** do `update.json`, senão os usuários recebem a notificação e
+clicam num link que ainda não existe.
 
 ---
 
