@@ -12,6 +12,13 @@ const QUALITIES = [
   { label: T.quality_360  || "360p",              value: "360p" },
 ];
 
+const PROFILES = [
+  { value: "padrao",   label: T.profile_padrao   || "Padrão (só assistir)",              hint: T.profile_hint_padrao   || "" },
+  { value: "premiere", label: T.profile_premiere || "Melhor p/ editar no Premiere",       hint: T.profile_hint_premiere || "" },
+  { value: "capcut",   label: T.profile_capcut   || "Melhor p/ editar no CapCut",         hint: T.profile_hint_capcut   || "" },
+  { value: "prores",   label: T.profile_prores   || "Premiere ProRes (pesado)",           hint: T.profile_hint_prores   || "" },
+];
+
 let root, fab, panel, statusEl;
 let collapsed = true;
 
@@ -54,6 +61,39 @@ function build() {
   gv.className = "group";
   gv.textContent = T.group_video || "Vídeo (MP4)";
   panel.appendChild(gv);
+
+  // Seletor de formato (perfil de codec) -- afeta os botoes de qualidade abaixo.
+  const profileRow = document.createElement("div");
+  profileRow.id = "bx-profile-row";
+  const profileSelect = document.createElement("select");
+  profileSelect.id = "bx-profile";
+  profileSelect.title = T.profile_label || "Formato:";
+  for (const p of PROFILES) {
+    const opt = document.createElement("option");
+    opt.value = p.value;
+    opt.textContent = p.label;
+    profileSelect.appendChild(opt);
+  }
+  profileRow.appendChild(profileSelect);
+  panel.appendChild(profileRow);
+
+  const profileHint = document.createElement("div");
+  profileHint.id = "bx-profile-hint";
+  panel.appendChild(profileHint);
+
+  function updateProfileHint() {
+    const p = PROFILES.find(x => x.value === profileSelect.value);
+    profileHint.textContent = p?.hint || "";
+  }
+  chrome.storage.local.get(["profile"]).then(({ profile }) => {
+    if (profile) profileSelect.value = profile;
+    updateProfileHint();
+  });
+  profileSelect.addEventListener("change", () => {
+    chrome.storage.local.set({ profile: profileSelect.value });
+    updateProfileHint();
+  });
+  profileSelect.addEventListener("click", (e) => e.stopPropagation());
 
   for (const q of QUALITIES) {
     const b = document.createElement("button");
@@ -378,9 +418,13 @@ async function download(mode, quality, url = location.href, onResp = null) {
   const { subtitles = false } = await chrome.storage.local.get(["subtitles"]);
   const trimStart = document.getElementById("bx-trim-start")?.value?.trim() || "";
   const trimEnd   = document.getElementById("bx-trim-end")?.value?.trim()   || "";
+  // Perfil so faz sentido em video; audio/foto vao sempre com "padrao" (o servidor ignora).
+  const profile = mode === "video"
+    ? (document.getElementById("bx-profile")?.value || "padrao")
+    : "padrao";
   chrome.runtime.sendMessage(
     { type: "download", url, mode, quality, audio_quality: "best", subtitles,
-      trim_start: trimStart, trim_end: trimEnd },
+      trim_start: trimStart, trim_end: trimEnd, profile },
     (resp) => {
       if (resp?.ok) {
         createJobCard(resp.job_id, mode, quality, url);

@@ -103,8 +103,11 @@ server/.venv/Scripts/python.exe -m PyInstaller Baixador.spec --noconfirm
 "%LOCALAPPDATA%\Programs\Inno Setup 6\ISCC.exe" Baixador.iss
 ```
 
-A versão fica em dois lugares e precisa bater: `__version__` em
-`server/server.py` e `AppVersion` em `Baixador.iss`.
+A versão fica em três lugares e precisa bater: `__version__` em
+`server/server.py`, `AppVersion` em `Baixador.iss`, e `version` em
+`extension/manifest.json` (esse último ficou 3 releases atrasado antes de
+alguém notar — é o que aparece em `chrome://extensions`, então é a forma mais
+fácil do usuário confirmar que pegou a versão certa).
 
 O instalador leva junto a pasta `extension/` — veja a nota em [Instalação](#2-extensão-chrome)
 sobre recarregar a extensão no Chrome depois de atualizar.

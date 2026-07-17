@@ -57,7 +57,7 @@ def _tool_cmd(name: str) -> list[str]:
     return [_find_tool(name)]
 
 
-__version__ = "1.1.1"
+__version__ = "1.1.2"
 # Feed publico com {"version": "...", "url": "...", "notes": "..."}.
 # E o update.json versionado na raiz do repo, servido pelo raw do GitHub.
 # Publicar uma versao nova = editar o update.json, dar push, e anexar o instalador

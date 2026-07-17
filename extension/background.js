@@ -215,6 +215,7 @@ chrome.runtime.onMessage.addListener((msg, sender, sendResponse) => {
           subtitles: msg.subtitles,
           trim_start: msg.trim_start,
           trim_end: msg.trim_end,
+          profile: msg.profile,
         });
         notify(data.job_id, "Baixador", `Baixando: ${msg.url.slice(0, 60)}`);
         sendResponse({ ok: true, job_id: data.job_id });
