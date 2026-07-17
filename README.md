@@ -58,6 +58,22 @@ extensão funciona, mas mostra o ícone padrão do Chrome.
   "Áudio (MP3)" — o yt-dlp resolve a maioria dos sites suportados
   ([lista completa](https://github.com/yt-dlp/yt-dlp/blob/master/supportedsites.md)).
 
+### ✂️ Edição pelo celular (v1.4)
+
+Na página mobile (`http://IP-DO-PC:5005/mobile`), abra **"✂️ Edição
+(opcional)"** antes de baixar um vídeo. Dá pra combinar:
+
+- **Cortar** um trecho (início/fim, ex.: `0:30` a `1:20`)
+- **Formato**: vertical 9:16 (Stories/Reels/TikTok) ou quadrado 1:1, com
+  fundo desfocado
+- **Velocidade**: 0.5x, 1.5x ou 2x
+- **Texto** sobreposto no vídeo
+- **Fade** de entrada/saída, **sem som**, e **≤16 MB** (pronto pro WhatsApp)
+
+O servidor baixa o vídeo, aplica as edições com o ffmpeg e devolve o
+arquivo já pronto pro celular. Requer `ffmpeg` (mesmo requisito dos
+downloads com áudio). O motor fica em `server/editor.py`.
+
 ## Notas legais
 
 - Baixar conteúdo público para uso pessoal viola os ToS de YouTube/IG/FB/etc.
