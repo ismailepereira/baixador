@@ -74,6 +74,15 @@ O servidor baixa o vídeo, aplica as edições com o ffmpeg e devolve o
 arquivo já pronto pro celular. Requer `ffmpeg` (mesmo requisito dos
 downloads com áudio). O motor fica em `server/editor.py`.
 
+### 🤖 Automação via Claude (skill /video)
+
+Abrindo uma sessão do Claude Code neste repositório (inclusive pelo
+celular), dá pra pedir em português normal — ex.: *"baixa esse vídeo e
+fatia em 15 clipes de 15s a 1min"* — e o Claude roda o `cli/videobot.py`
+e devolve os arquivos no chat. O modo `clipes` corta nas **pausas da
+fala** (detecção de silêncio); há também corte simples, vertical/quadrado,
+velocidade, texto, fade, compressão pra WhatsApp, MP3 e GIF.
+
 ## Notas legais
 
 - Baixar conteúdo público para uso pessoal viola os ToS de YouTube/IG/FB/etc.
