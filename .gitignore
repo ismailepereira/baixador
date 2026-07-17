@@ -79,3 +79,17 @@ secrets.*
 
 # ========= Claude Code interno =========
 .claude/
+# ...exceto a skill /video, que precisa existir nas sessoes remotas
+!.claude/
+.claude/*
+!.claude/skills/
+.claude/skills/*
+!.claude/skills/video/
+
+# ========= Saidas do videobot (nunca versionar midia) =========
+saida/
+*.mp4
+*.webm
+*.mkv
+*.mp3
+*.gif

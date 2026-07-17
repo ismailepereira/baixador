@@ -24,6 +24,8 @@ except ImportError:
 from flask import Flask, Response, jsonify, request, stream_with_context
 from flask_cors import CORS
 
+import editor
+
 DOWNLOADS_DIR = Path.home() / "Downloads" / "Baixador"
 DOWNLOADS_DIR.mkdir(parents=True, exist_ok=True)
 
@@ -57,7 +59,7 @@ def _tool_cmd(name: str) -> list[str]:
     return [_find_tool(name)]
 
 
-__version__ = "1.0.0"
+__version__ = "1.4.0"
 # Coloque aqui a URL pública que retorna {"version": "1.1.0", "url": "...", "notes": "..."}
 # Pode ser GitHub Releases, gist, S3, ou qualquer endpoint HTTP.
 UPDATE_FEED_URL = os.environ.get(
@@ -184,11 +186,35 @@ def _spawn(cmd: list[str], job_id: str, cleanup_files: list[str] | None, dest_di
         JOBS[job_id]["queue"].put(line)
     proc.wait()
 
+    # Pos-processamento: edicao via ffmpeg, se o job pediu (chave "edit")
+    edit_error: str | None = None
+    if proc.returncode == 0 and dest_dir:
+        with JOB_LOCK:
+            cur = JOBS[job_id]
+            edit_spec = cur.get("edit") if cur["status"] != "cancelled" else None
+            if edit_spec:
+                cur["status"] = "editing"
+        if edit_spec:
+            fila = JOBS[job_id]["queue"]
+            fila.put("[edicao] download concluido — aplicando edicoes...\n")
+            try:
+                final = editor.editar_pasta(
+                    Path(dest_dir), edit_spec, log=lambda s: fila.put(s + "\n")
+                )
+                fila.put(f"[edicao] pronto: {final.name}\n")
+            except editor.EdicaoErro as e:
+                edit_error = str(e)
+                fila.put(f"[edicao] ERRO: {e}\n")
+            except Exception as e:  # ffmpeg ausente, disco cheio, etc.
+                edit_error = f"{type(e).__name__}: {e}"
+                fila.put(f"[edicao] ERRO inesperado: {edit_error}\n")
+
     import time
     with JOB_LOCK:
         cur = JOBS[job_id]
         if cur["status"] != "cancelled":
-            cur["status"] = "done" if proc.returncode == 0 else "error"
+            ok = proc.returncode == 0 and edit_error is None
+            cur["status"] = "done" if ok else "error"
         cur["returncode"] = proc.returncode
         cur["ended_at"] = time.time()
         final_status = cur["status"]
@@ -378,6 +404,21 @@ MOBILE_HTML = r"""<!doctype html>
   }
   summary { cursor: pointer; color: #aaa; }
   details[open] summary { color: #f5f5f7; margin-bottom: 8px; }
+  details.edicao { margin-top: 12px; }
+  details.edicao label { color: #aaa; font-size: 12px; display: block; margin-top: 8px; }
+  details.edicao input[type="text"], details.edicao input:not([type]) {
+    width: 100%; background: #1c1c1e; color: #f5f5f7;
+    border: 2px solid #3a3a3c; border-radius: 10px;
+    padding: 10px 12px; font: 14px/1.2 system-ui, sans-serif; margin-top: 6px;
+  }
+  details.edicao input:focus { outline: none; border-color: #1f8a3a; }
+  details.edicao select { width: 100%; font-weight: 400; font-size: 13px; }
+  details.edicao .checks { align-items: center; }
+  details.edicao .checks label {
+    display: flex; align-items: center; gap: 6px; margin: 0;
+    font-size: 13px; color: #f5f5f7;
+  }
+  details.edicao .checks input[type="checkbox"] { width: 18px; height: 18px; accent-color: #1f8a3a; }
 </style>
 </head>
 <body>
@@ -399,6 +440,34 @@ MOBILE_HTML = r"""<!doctype html>
     <option value="480p">480p</option>
     <option value="360p">360p</option>
   </select>
+
+  <details id="edicao" class="edicao">
+    <summary>✂️ Edição (opcional)</summary>
+    <label>Cortar (deixe vazio pra manter inteiro)</label>
+    <div class="row">
+      <input id="e-ini" placeholder="início ex: 0:30" inputmode="numeric" autocomplete="off">
+      <input id="e-fim" placeholder="fim ex: 1:20" inputmode="numeric" autocomplete="off">
+    </div>
+    <div class="row">
+      <select id="e-formato">
+        <option value="">Formato original</option>
+        <option value="vertical">Vertical 9:16 (Stories/Reels)</option>
+        <option value="quadrado">Quadrado 1:1 (feed)</option>
+      </select>
+      <select id="e-vel">
+        <option value="">Velocidade normal</option>
+        <option value="0.5">0.5x (câmera lenta)</option>
+        <option value="1.5">1.5x</option>
+        <option value="2">2x</option>
+      </select>
+    </div>
+    <input id="e-texto" placeholder="Texto sobre o vídeo (opcional)" autocomplete="off">
+    <div class="row checks">
+      <label><input type="checkbox" id="e-fade"> Fade</label>
+      <label><input type="checkbox" id="e-mudo"> Sem som</label>
+      <label><input type="checkbox" id="e-zap"> ≤16MB (WhatsApp)</label>
+    </div>
+  </details>
 
   <button class="go" id="go">⬇ Baixar</button>
 
@@ -426,8 +495,24 @@ document.querySelectorAll(".modes button").forEach(b => {
     document.querySelectorAll(".modes button").forEach(x => x.classList.remove("active"));
     b.classList.add("active");
     mode = b.dataset.mode;
+    document.getElementById("edicao").style.display = (mode === "video") ? "" : "none";
   });
 });
+
+function montarEdicao() {
+  const val = id => document.getElementById(id).value.trim();
+  const marcado = id => document.getElementById(id).checked;
+  const e = {};
+  const ini = val("e-ini"), fim = val("e-fim");
+  if (ini && fim) e.cortes = [[ini, fim]];
+  if (val("e-formato")) e.formato = val("e-formato");
+  if (val("e-vel")) e.velocidade = parseFloat(val("e-vel"));
+  if (val("e-texto")) e.texto = val("e-texto");
+  if (marcado("e-fade")) e.fade = true;
+  if (marcado("e-mudo")) e.mudo = true;
+  if (marcado("e-zap")) e.comprimir_mb = 16;
+  return Object.keys(e).length ? e : null;
+}
 
 function setStatus(text, cls) {
   status.className = cls || "";
@@ -458,6 +543,9 @@ async function poll(jobId) {
       goBtn.textContent = "⬇ Tentar novamente";
       return;
     }
+    if (d.status === "editing") {
+      setStatus("✂️ Editando o vídeo (cortes, formato, filtros)...", "loading");
+    }
     setTimeout(() => poll(jobId), 1500);
   } catch (e) {
     setStatus(`✗ Servidor offline: ${e}`, "err");
@@ -482,7 +570,8 @@ goBtn.addEventListener("click", async () => {
       headers: { "Content-Type": "application/json" },
       body: JSON.stringify({
         url, mode,
-        quality: document.getElementById("quality").value
+        quality: document.getElementById("quality").value,
+        edit: (mode === "video") ? montarEdicao() : null
       })
     });
     const d = await r.json();
@@ -559,6 +648,15 @@ def mobile_download() -> Response:
     if not url:
         return jsonify({"ok": False, "error": "URL ausente"})
 
+    # Edicao pos-download (so faz sentido para video)
+    edit_spec = data.get("edit") if mode == "video" else None
+    if edit_spec is not None and not editor.spec_tem_edicao(edit_spec):
+        edit_spec = None
+    if edit_spec:
+        erros = editor.validar_spec(edit_spec)
+        if erros:
+            return jsonify({"ok": False, "error": "edicao invalida: " + "; ".join(erros)})
+
     job_id = uuid.uuid4().hex[:12]
     # output: pasta temporaria por job, qualquer extensao
     out_dir = MOBILE_DIR / job_id
@@ -600,6 +698,7 @@ def mobile_download() -> Response:
             "ended_at": None,
             "url": url, "mode": mode, "quality": quality,
             "mobile_dir": str(out_dir),
+            "edit": edit_spec,
         }
     threading.Thread(
         target=_spawn, args=(cmd, job_id, None, str(out_dir)), daemon=True
@@ -673,6 +772,7 @@ def health() -> Response:
         "ffmpeg_found": bool(FFMPEG_PATH and Path(FFMPEG_PATH).exists()),
         "qualities": list(QUALITY_FORMATS.keys()),
         "update_feed": bool(UPDATE_FEED_URL),
+        "features": ["edicao"],
     })
 
 
