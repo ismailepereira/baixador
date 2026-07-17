@@ -57,12 +57,15 @@ def _tool_cmd(name: str) -> list[str]:
     return [_find_tool(name)]
 
 
-__version__ = "1.0.0"
-# Coloque aqui a URL pública que retorna {"version": "1.1.0", "url": "...", "notes": "..."}
-# Pode ser GitHub Releases, gist, S3, ou qualquer endpoint HTTP.
+__version__ = "1.1.0"
+# Feed publico com {"version": "...", "url": "...", "notes": "..."}.
+# E o update.json versionado na raiz do repo, servido pelo raw do GitHub.
+# Publicar uma versao nova = editar o update.json, dar push, e anexar o instalador
+# na Release correspondente (ver README > Publicar uma atualizacao).
+# Defina BAIXADOR_UPDATE_FEED="" pra desligar a checagem.
 UPDATE_FEED_URL = os.environ.get(
     "BAIXADOR_UPDATE_FEED",
-    "",  # vazio = auto-update desabilitado
+    "https://raw.githubusercontent.com/ismailepereira/baixador/master/update.json",
 )
 
 
@@ -137,6 +140,61 @@ AUDIO_QUALITY = {
     "high": "2",  # ~190 kbps
     "med":  "5",  # ~130 kbps
 }
+
+# Perfis de saida do video.
+#
+# O YouTube entrega o melhor video em VP9/AV1 e o melhor audio em Opus. Trocar so
+# o container pra .mp4 nao muda os codecs, e nenhum editor (Premiere, CapCut,
+# Resolve) decodifica VP9/Opus -- daí o "arquivo nao suportado". Os perfis de
+# edicao forcam H.264 + AAC, que todo NLE le nativamente.
+VIDEO_PROFILES = ("padrao", "premiere", "capcut", "prores")
+
+
+def _height_limit(quality: str) -> int | None:
+    """'720p' -> 720; 'best' -> None (sem limite)."""
+    try:
+        return int((quality or "").rstrip("p"))
+    except ValueError:
+        return None
+
+
+def _editor_format(max_height: int | None) -> str:
+    """Cadeia de formatos que prioriza H.264 (avc1) + AAC (mp4a)."""
+    h = f"[height<={max_height}]" if max_height else ""
+    return (
+        f"bestvideo[vcodec^=avc1]{h}+bestaudio[acodec^=mp4a]/"
+        f"bestvideo[vcodec^=avc1]{h}+bestaudio/"
+        f"best[vcodec^=avc1]{h}/"
+        f"bestvideo{h}+bestaudio/best{h}"
+    )
+
+
+def _profile_args(profile: str, quality: str) -> list[str]:
+    """Argumentos do yt-dlp para o perfil de saida escolhido."""
+    if profile == "prores":
+        # Re-encode pesado, mas o unico 100% garantido: ProRes 422 HQ + PCM em .mov.
+        return [
+            "-f", QUALITY_FORMATS.get(quality, QUALITY_FORMATS["best"]),
+            "--recode-video", "mov",
+            "--postprocessor-args",
+            "VideoConvertor:-c:v prores_ks -profile:v 3 -pix_fmt yuv422p10le -c:a pcm_s16le",
+        ]
+    if profile in ("premiere", "capcut"):
+        h = _height_limit(quality)
+        if profile == "capcut":
+            # CapCut engasga com 4K no celular; 1080p e o teto pratico.
+            h = min(h or 1080, 1080)
+        return [
+            "-f", _editor_format(h),
+            "--merge-output-format", "mp4",
+            # Copia o video (ja e avc1) e normaliza o audio pra AAC mesmo que o
+            # fallback tenha pego Opus.
+            "--postprocessor-args", "Merger:-c:v copy -c:a aac -b:a 192k",
+        ]
+    return [
+        "-f", QUALITY_FORMATS.get(quality, QUALITY_FORMATS["best"]),
+        "--merge-output-format", "mp4",
+    ]
 
 app = Flask(__name__)
 CORS(app, resources={r"/*": {"origins": ["chrome-extension://*"]}})
@@ -326,6 +384,8 @@ MOBILE_HTML = r"""<!doctype html>
   textarea:focus { outline: none; border-color: #1f8a3a; }
   .row { display: flex; gap: 8px; margin: 12px 0; }
   .row > * { flex: 1; }
+  #profile, #quality { width: 100%; margin-bottom: 8px; }
+  .hint { font-size: 12px; line-height: 1.35; color: #888; margin: 0 0 12px; }
   select, button {
     background: #2c2c2e; color: #f5f5f7;
     border: 2px solid #3a3a3c; border-radius: 10px;
@@ -392,6 +452,14 @@ MOBILE_HTML = r"""<!doctype html>
     <button data-mode="photo">📷 Foto</button>
   </div>
 
+  <select id="profile">
+    <option value="padrao" selected>Padrão (só assistir)</option>
+    <option value="premiere">Melhor p/ editar no Premiere</option>
+    <option value="capcut">Melhor p/ editar no CapCut</option>
+    <option value="prores">Premiere ProRes (pesado)</option>
+  </select>
+  <p class="hint" id="profile-hint"></p>
+
   <select id="quality">
     <option value="best">Melhor qualidade</option>
     <option value="1080p">1080p</option>
@@ -420,12 +488,38 @@ const goBtn = document.getElementById("go");
 const status = document.getElementById("status");
 const barWrap = document.getElementById("bar-wrap");
 const barFill = document.getElementById("bar-fill");
+const profileEl = document.getElementById("profile");
+const profileHint = document.getElementById("profile-hint");
+const qualityEl = document.getElementById("quality");
+
+const PROFILE_HINTS = {
+  padrao:   "Melhor qualidade por MB, mas pode vir VP9/Opus — o Premiere recusa.",
+  premiere: "H.264 + AAC em .mp4. Abre direto no Premiere, sem re-encode.",
+  capcut:   "H.264 + AAC em .mp4, limitado a 1080p pro CapCut rodar leve.",
+  prores:   "ProRes 422 HQ + PCM em .mov. Edição fluida, arquivo bem maior e demora.",
+};
+
+function updateHint() {
+  profileHint.textContent = PROFILE_HINTS[profileEl.value] || "";
+}
+profileEl.addEventListener("change", updateHint);
+updateHint();
+
+// Perfil e qualidade so fazem sentido em video.
+function syncControls() {
+  const isVideo = mode === "video";
+  profileEl.style.display = isVideo ? "" : "none";
+  profileHint.style.display = isVideo ? "" : "none";
+  qualityEl.style.display = isVideo ? "" : "none";
+}
+syncControls();
 
 document.querySelectorAll(".modes button").forEach(b => {
   b.addEventListener("click", () => {
     document.querySelectorAll(".modes button").forEach(x => x.classList.remove("active"));
     b.classList.add("active");
     mode = b.dataset.mode;
+    syncControls();
   });
 });
 
@@ -482,7 +576,8 @@ goBtn.addEventListener("click", async () => {
       headers: { "Content-Type": "application/json" },
       body: JSON.stringify({
         url, mode,
-        quality: document.getElementById("quality").value
+        quality: qualityEl.value,
+        profile: profileEl.value
       })
     });
     const d = await r.json();
@@ -555,6 +650,7 @@ def mobile_download() -> Response:
     url = (data.get("url") or "").strip()
     mode = data.get("mode", "video")
     quality = data.get("quality", "best")
+    profile = data.get("profile", "padrao")
 
     if not url:
         return jsonify({"ok": False, "error": "URL ausente"})
@@ -580,8 +676,7 @@ def mobile_download() -> Response:
         if FFMPEG_PATH:
             cmd += ["--ffmpeg-location", FFMPEG_PATH]
     else:
-        fmt = QUALITY_FORMATS.get(quality, QUALITY_FORMATS["best"])
-        cmd = [*YTDLP, "-f", fmt, "--merge-output-format", "mp4",
+        cmd = [*YTDLP, *_profile_args(profile, quality),
                "--newline",
                "--progress-template", "PROG|%(progress._percent_str)s|%(progress._speed_str)s|%(progress._eta_str)s",
                "-o", str(out_dir / "%(title)s.%(ext)s"), url]
@@ -598,7 +693,7 @@ def mobile_download() -> Response:
             "proc": None,
             "started_at": __import__("time").time(),
             "ended_at": None,
-            "url": url, "mode": mode, "quality": quality,
+            "url": url, "mode": mode, "quality": quality, "profile": profile,
             "mobile_dir": str(out_dir),
         }
     threading.Thread(
@@ -625,6 +720,7 @@ def mobile_file(job_id: str) -> Response:
     mime = "application/octet-stream"
     ext = target.suffix.lower()
     if ext in (".mp4", ".m4v"): mime = "video/mp4"
+    elif ext == ".mov": mime = "video/quicktime"
     elif ext == ".webm": mime = "video/webm"
     elif ext == ".mp3": mime = "audio/mpeg"
     elif ext in (".m4a", ".aac"): mime = "audio/mp4"
@@ -672,6 +768,7 @@ def health() -> Response:
         "ffmpeg": FFMPEG_PATH or "(PATH)",
         "ffmpeg_found": bool(FFMPEG_PATH and Path(FFMPEG_PATH).exists()),
         "qualities": list(QUALITY_FORMATS.keys()),
+        "profiles": list(VIDEO_PROFILES),
         "update_feed": bool(UPDATE_FEED_URL),
     })
 
@@ -714,6 +811,7 @@ def download() -> Response:
     mode = data.get("mode", "video")             # "video" ou "audio"
     quality = data.get("quality", "best")        # "best"/"1080p"/"720p"/"480p"/"360p"
     audio_q = data.get("audio_quality", "best")  # "best"/"high"/"med"
+    profile = data.get("profile", "padrao")      # "padrao"/"premiere"/"capcut"/"prores"
 
     if not url:
         return jsonify({"error": "url ausente"}), 400
@@ -773,11 +871,9 @@ def download() -> Response:
         if cookies_path:
             cmd += ["--cookies", cookies_path]
     else:
-        fmt = QUALITY_FORMATS.get(quality, QUALITY_FORMATS["best"])
         cmd = [
             *YTDLP,
-            "-f", fmt,
-            "--merge-output-format", "mp4",
+            *_profile_args(profile, quality),
             "--newline",
             "--progress-template", "PROG|%(progress._percent_str)s|%(progress._speed_str)s|%(progress._eta_str)s",
             "-o", "%(title)s.%(ext)s",
@@ -804,12 +900,15 @@ def download() -> Response:
             cmd += ["--cookies", cookies_path]
 
     job_id = _start_job(cmd, cleanup_files=cleanup, dest_dir=str(DOWNLOADS_DIR),
-                        metadata={"url": url, "mode": mode, "quality": quality if mode == "video" else audio_q})
+                        metadata={"url": url, "mode": mode,
+                                  "quality": quality if mode == "video" else audio_q,
+                                  "profile": profile if mode == "video" else None})
     return jsonify({
         "job_id": job_id,
         "downloads_dir": str(DOWNLOADS_DIR),
         "mode": mode,
         "quality": quality if mode == "video" else audio_q,
+        "profile": profile if mode == "video" else None,
         "cookies_used": bool(cookies_path),
     })
 
@@ -827,6 +926,7 @@ def jobs_list() -> Response:
                 "url": j.get("url"),
                 "mode": j.get("mode"),
                 "quality": j.get("quality"),
+                "profile": j.get("profile"),
                 "started_at": j.get("started_at"),
                 "ended_at": j.get("ended_at"),
                 "returncode": j.get("returncode"),
