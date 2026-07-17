@@ -10,7 +10,7 @@
 ; o instalador volte a ser reproduzivel a partir do fonte.
 
 #define AppName "Baixador"
-#define AppVersion "1.1.0"
+#define AppVersion "1.1.1"
 #define AppExe "Baixador.exe"
 
 [Setup]
