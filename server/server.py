@@ -65,7 +65,7 @@ __version__ = "1.1.0"
 # Defina BAIXADOR_UPDATE_FEED="" pra desligar a checagem.
 UPDATE_FEED_URL = os.environ.get(
     "BAIXADOR_UPDATE_FEED",
-    "https://raw.githubusercontent.com/ismailepereira/baixador/master/update.json",
+    "https://raw.githubusercontent.com/ismailepereira/baixador/main/update.json",
 )
 
 
